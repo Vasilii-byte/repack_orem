@@ -1,15 +1,36 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+
+"""Скрипт по перепаковке архивов из Диадока и СБИСа."""
 import os
 import logging
 import datetime as DT
+import tempfile
+import zipfile
+from shutil import copyfile
 from os.path import join, dirname, exists
 from dotenv import load_dotenv
 
 # Загрузка переменных окружения
 dotenv_path = join(dirname(__file__), '.env')
 load_dotenv(dotenv_path)
+
+
+def unpack_zip(archive_file: str) -> None:
+    '''Распаковка архива.'''
+    with zipfile.ZipFile(archive_file, 'r') as zip_file:
+        for name in zip_file.namelist():
+            unicode_name = name.encode('cp437').decode('cp866')
+            # не декодированное имя - для чтения в архиве
+            with zip_file.open(name) as f0:
+                content = f0.read()
+                fullpath = join(dirname(archive_file), unicode_name)
+                if not exists(dirname(fullpath)):
+                    os.makedirs(dirname(fullpath))
+                with open(fullpath, 'wb') as f1:
+                    f1.write(content)
+
 
 def get_logger() -> logging.Logger:
     '''Инициализация логгера.'''
@@ -33,13 +54,25 @@ def get_logger() -> logging.Logger:
 
 
 def processing_buffer() -> None:
-    '''Обработка папки-буфера с выгруженными из Диадока и СБИСа архивами'''
+    '''Обработка папки-буфера с выгруженными из Диадока и СБИСа архивами.'''
     logger.info('------------Старт обработки------------')
-    for path in os.listdir(BUFFER_DIR):
-        full_path = join(BUFFER_DIR, path)
-        if os.path.isdir(full_path):
-            logger.info(f"Обработка папки {path}")
-            print(path)
+    for supplier_path in os.listdir(BUFFER_DIR):
+        full_supplier_path = join(BUFFER_DIR, supplier_path)
+        if os.path.isdir(full_supplier_path):
+            for archive_file in os.listdir(full_supplier_path):
+                full_archive_file = join(full_supplier_path, archive_file)
+                if os.path.isfile(full_archive_file) and archive_file.lower().endswith('.zip'):
+                    logger.info("Обработка папки %s", supplier_path)
+                    print(f"----------{supplier_path}----------")
+
+                    logger.info("Распаковка файла %s", archive_file)
+                    print(f"Распаковка файла {archive_file}")
+                    with tempfile.TemporaryDirectory() as tmpdirname:
+                        _tmp_archive_file = join(tmpdirname, archive_file)
+                        copyfile(full_archive_file, _tmp_archive_file)
+                        unpack_zip(_tmp_archive_file)
+                        os.remove(_tmp_archive_file)
+                        print('created temporary directory', tmpdirname)
 
 
 # загружаем основной путь к папке с архивами

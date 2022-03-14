@@ -1,3 +1,5 @@
 .env
 *.log
 LOG
+*.bak
+.vscode
