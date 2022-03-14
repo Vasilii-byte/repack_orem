@@ -56,23 +56,34 @@ def get_logger() -> logging.Logger:
 def processing_buffer() -> None:
     '''Обработка папки-буфера с выгруженными из Диадока и СБИСа архивами.'''
     logger.info('------------Старт обработки------------')
-    for supplier_path in os.listdir(BUFFER_DIR):
+    for supplier_path in os.listdir(BUFFER_DIR): # проход по папкам поставщиков
         full_supplier_path = join(BUFFER_DIR, supplier_path)
-        if os.path.isdir(full_supplier_path):
+        if os.path.isdir(full_supplier_path): # проверка, что это именно папка, а не файл
+
+            # проход по файлам внутри папок поставщиков
             for archive_file in os.listdir(full_supplier_path):
                 full_archive_file = join(full_supplier_path, archive_file)
-                if os.path.isfile(full_archive_file) and archive_file.lower().endswith('.zip'):
+                if os.path.isfile(full_archive_file) and \
+                    archive_file.lower().endswith('.zip'): # проверка условий
+
+                    # если в папке есть не обработанные архивы,
+                    # тогда и показываем, что делаем обработку папки
                     logger.info("Обработка папки %s", supplier_path)
                     print(f"----------{supplier_path}----------")
 
                     logger.info("Распаковка файла %s", archive_file)
                     print(f"Распаковка файла {archive_file}")
+
+                    # распаковка архива во временную папку
                     with tempfile.TemporaryDirectory() as tmpdirname:
                         _tmp_archive_file = join(tmpdirname, archive_file)
+
+                        # копирование архива во временную папку
                         copyfile(full_archive_file, _tmp_archive_file)
-                        unpack_zip(_tmp_archive_file)
-                        os.remove(_tmp_archive_file)
-                        print('created temporary directory', tmpdirname)
+                        unpack_zip(_tmp_archive_file) # распаковка
+                        os.remove(_tmp_archive_file) # удаление архива
+                        for doc_dir in os.listdir(tmpdirname): # перебор папок с документами
+                            print(doc_dir)
 
 
 # загружаем основной путь к папке с архивами
