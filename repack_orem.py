@@ -87,6 +87,30 @@ def get_document_no_date_xml(root: ET.Element) -> tuple:
     return NOT_RESOLVED, NOT_RESOLVED
 
 
+def convert_long_date_to_short_date(dt: str) -> DT.date:
+    """Заменяем месяц строкой на месяц числом."""
+
+    months_str = {
+        'ЯНВАРЯ': '01',
+        'ФЕВРАЛЯ': '02',
+        'МАРТА': '03',
+        'АПРЕЛЯ': '04',
+        'МАЯ': '05',
+        'ИЮНЯ': '06',
+        'ИЮЛЯ': '07',
+        'АВГУСТА': '08',
+        'СЕНТЯБРЯ': '09',
+        'ОКТЯБРЯ': '10',
+        'НОЯБРЯ': '11',
+        'ДЕКАБРЯ': '12',
+    }
+    for key, value in months_str.items():
+        if key in dt:
+            dt_str = dt.replace(key, value)
+            break
+    return parse(dt_str)
+
+
 def get_document_no_date_pdf(pdf_text: str, doc_type: str) -> tuple:
     """Получение номера и даты документа pdf."""
 
@@ -96,7 +120,7 @@ def get_document_no_date_pdf(pdf_text: str, doc_type: str) -> tuple:
             r'АКТ[\s.]ПРИЕМА-ПЕРЕДАЧИ\s\(ПОСТАВКИ\)\sМОЩНОСТИ\s№\s([\d]*?)\s*ОТ\s*(\d{2}\s[А-Я]+\s\d{4})\s',        # noqa
             r'ПРИЕМА\s?[-–]\s?ПЕРЕДАЧИ\s\(ПОСТАВКИ\)\sМОЩНОСТИ\s№\s([\d-]*?)\s*ОТ\s*(\d{2}\.\d{2}\.\d{4})\s',       # noqa
             r'АКТ[\s.]*?ПРИЕМА-ПЕРЕДАЧИ\s\МОЩНОСТИ\s№\s([\d-]*?)\s*ОТ\s*(\d{2}\s[А-Я]+\s\d{4})',                    # noqa
-            r'АКТ[\s.]ПРИЕМА-ПЕРЕДАЧИ\s№\s([\d-]*?)\s*ОТ\s*(\d{2}\s[А-Я]+\s\d{4})',
+            r'АКТ[\s.]ПРИЕМА-ПЕРЕДАЧИ\s№\s([\d-]*?)\s*ОТ\s*(\d{2}\s[А-Я]+\s\d{4})',                                 # noqa
             r'АКТ[\s.]ПРИЕМА\s*?[-–]\s*?ПЕРЕДАЧИ\s[\w\W]{1,100}№\s?([\d\-]+)\sОТ\s(\d{2}\.\d{2}\.\d{4})',           # noqa
             r'АКТ[\s.]ПРИЕМА[-\s]*?ПЕРЕДАЧИ\s[\w\W]{1,100}№\s?([\d\-]+)\sОТ\s(\d{2}\.\d{2}\.\d{4})',                # noqa
             r'АКТ[\s.]ПРИЕМА[-\s]*?ПЕРЕДАЧИ\s№\s?([\d\-]+)\sОТ\s(\d{2}\.\d{2}\.\d{4})',                             # noqa
@@ -118,20 +142,6 @@ def get_document_no_date_pdf(pdf_text: str, doc_type: str) -> tuple:
             r'(KOMMOD[\W\w]+?)\sОТ', # noqa
         )
 
-    months_str = {
-        'ЯНВАРЯ': '01',
-        'ФЕВРАЛЯ': '02',
-        'МАРТА': '03',
-        'АПРЕЛЯ': '04',
-        'МАЯ': '05',
-        'ИЮНЯ': '06',
-        'ИЮЛЯ': '07',
-        'АВГУСТА': '08',
-        'СЕНТЯБРЯ': '09',
-        'ОКТЯБРЯ': '10',
-        'НОЯБРЯ': '11',
-        'ДЕКАБРЯ': '12',
-    }
     doc_number = NOT_RESOLVED
     for mask in doc_no_mask:
         res0 = re.search(mask, pdf_text)
@@ -144,14 +154,7 @@ def get_document_no_date_pdf(pdf_text: str, doc_type: str) -> tuple:
             doc_number = doc_number.replace('/', '_')
 
             if doc_type == 'АПП':
-                dt_str = res0[2]
-                # Заменяем месяц строкой на месяц числом
-                for key, value in months_str.items():
-                    if key in dt_str:
-                        dt_str = dt_str.replace(key, value)
-                        break
-                # получаем дату из текстовой строки
-                doc_date = parse(dt_str)
+                doc_date = convert_long_date_to_short_date(res0[2])
             else:
                 doc_date = DT.datetime.today() + DT.timedelta(days=-30)
                 last_day = calendar.monthrange(doc_date.year, doc_date.month)[1]
@@ -288,6 +291,16 @@ def get_market_xml(root: ET.Element) -> str:
                 if eng_market in _markets:
                     return _markets[eng_market]
 
+    _tag = root.find('Файл/Документ/СвДокПРУ/СодФХЖ1/Основание')
+    if _tag is not None:
+        _osn_num = _tag.get('НаимОсн').upper()
+        for mask in market_mask:
+            res = re.search(mask, _osn_num)
+            if res is not None:
+                eng_market = res[1]
+                if eng_market in _markets:
+                    return _markets[eng_market]
+                    
     return NOT_RESOLVED
 
 
@@ -318,6 +331,8 @@ def get_market_pdf(pdf_text: str, doc_type: str) -> str:
             r'№[\s.]*?([A-Z]{3,4})-[A-Z\d-]+\s*ОТ\s*\d{2}\.\d{2}\.\d{4}',
             r'№[\s.]?([A-Z]{3,4})-[A-Z\d-]+\s*ОТ[\s.]*\d{2}\.\d{2}\.\d{4}',
             r'СВОБОДНОМУ\sДОГОВОРУ[\w\-\s]*№\s?[\w\-]+\-(SDD)\-',
+            r'№\s*?([DVR]{3,4})-',
+            r'№[\s.]*?(KOM)-',
             r'[\S]*?(SDMO)\-ATS',
         )
     else:
@@ -332,7 +347,7 @@ def get_market_pdf(pdf_text: str, doc_type: str) -> str:
         )
 
     for mask in market_mask:
-        res0 = re.search(mask, pdf_text)
+        res0 = re.search(mask, pdf_text, re.S)
         if res0 is not None:
             eng_market = res0[1]
             if eng_market in _markets:
@@ -574,7 +589,7 @@ def process_pdf(_supplier_path: str, pdf_file: str) -> str:
     market_type = get_market_pdf(page_text, doc_type)
 
     # print(page_text)
-    if NOT_RESOLVED in (doc_type, doc_number, doc_date):
+    if NOT_RESOLVED in (doc_type, doc_number, doc_date, market_type):
         print(
             (f'Ошибка разбора файла {_short_name}. Поставщик {_supplier_path}.'
              f' {market_type}: {doc_type} № {doc_number} от {_date_str}')
